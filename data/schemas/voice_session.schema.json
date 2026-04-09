@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VoiceSession",
+  "type": "object",
+  "required": [
+    "user_id_hash",
+    "prompt_id",
+    "recorded_at_ms",
+    "sample_rate_hz",
+    "duration_s",
+    "rms_series"
+  ],
+  "properties": {
+    "user_id_hash": { "type": "string", "minLength": 8 },
+    "prompt_id": { "type": "string", "minLength": 2 },
+    "recorded_at_ms": { "type": "integer", "minimum": 0 },
+    "sample_rate_hz": { "type": "integer", "minimum": 8000 },
+    "duration_s": { "type": "number", "minimum": 1 },
+    "f0_series_hz": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 }
+    },
+    "rms_series": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0 }
+    },
+    "environment_quality_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "additionalProperties": false
+}

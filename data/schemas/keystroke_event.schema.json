@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KeystrokeEvent",
+  "type": "object",
+  "required": [
+    "user_id_hash",
+    "session_id",
+    "timestamp_ms",
+    "dwell_ms",
+    "flight_ms_prev"
+  ],
+  "properties": {
+    "user_id_hash": { "type": "string", "minLength": 8 },
+    "session_id": { "type": "string", "minLength": 8 },
+    "timestamp_ms": { "type": "integer", "minimum": 0 },
+    "dwell_ms": { "type": "number", "minimum": 0 },
+    "flight_ms_prev": { "type": "number", "minimum": 0 },
+    "device_metadata": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "number", "boolean"] }
+    }
+  },
+  "additionalProperties": false
+}

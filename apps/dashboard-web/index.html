@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Trace Dashboard MVP</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <h1>Trace Longitudinal Dashboard</h1>
+      <p>Trend-aware biomarkers across keystroke cadence and voice micro-tremor.</p>
+    </header>
+
+    <section class="panel">
+      <h2>User Snapshot</h2>
+      <div id="summary">Loading...</div>
+    </section>
+
+    <section class="panel charts">
+      <h2>Mock Trend Curves</h2>
+      <canvas id="trendCanvas" width="760" height="260"></canvas>
+    </section>
+
+    <section class="panel">
+      <h2>Current Composite Risk</h2>
+      <div id="riskCard" class="risk-card">--</div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
