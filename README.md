@@ -1,44 +1,65 @@
 # Trace
 
-Trace is a privacy-first longitudinal biomarker platform for early motor and voice pattern drift detection.
+Trace is a privacy-first platform for detecting subtle **behavioral drift over time** from two signals:
 
-This project combines:
-- Keystroke cadence biomarkers (dwell and flight timing)
-- Weekly voice biomarkers (MFCC, jitter, shimmer, tremor proxies)
-- Time-series trend analysis over months (not one-off classification)
+- keystroke cadence (dwell and flight timing)
+- prompted weekly voice features (MFCC, jitter, shimmer proxies)
+
+The goal is not one-shot classification. The goal is **longitudinal trend detection**.
+
+## Why Trace
+
+Most digital health prototypes overfit to single snapshots. Trace is built around a different idea:
+
+- baseline each user against their own historical rhythm
+- detect persistent movement, not noisy one-day spikes
+- show explainable trend signals with uncertainty
+
+## What Exists In This Repo
+
+- Ingestion API for events and sessions
+- Scoring service for drift computations
+- Feature pipeline stubs and model training stubs
+- Dashboard web app scaffold
+- Data schemas and architecture/privacy docs
 
 ## Quickstart (Local MVP)
 
-1. Create and activate a Python environment.
-2. Install dependencies.
-3. Run ingestion and scoring APIs.
-4. Open dashboard in browser.
+### 1) Set up Python
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+```
 
+### 2) Run APIs
+
+```powershell
 # Terminal 1
 cd services/ingestion-api
 uvicorn main:app --reload --port 8010
+```
 
+```powershell
 # Terminal 2
 cd services/scoring-service
 uvicorn main:app --reload --port 8020
 ```
 
-Open `apps/dashboard-web/index.html` directly in your browser.
-
-Optional helper script:
+Optional helper:
 
 ```powershell
 ./scripts/start_local.ps1
 ```
 
+### 3) Open Dashboard
+
+Open `apps/dashboard-web/index.html` directly in your browser.
+
 ## First API Calls
 
-Post keystroke timing event:
+### Ingest a keystroke event
 
 ```bash
 curl -X POST http://localhost:8010/v1/keystroke/events \
@@ -52,7 +73,7 @@ curl -X POST http://localhost:8010/v1/keystroke/events \
   }'
 ```
 
-Score drift:
+### Compute drift
 
 ```bash
 curl -X POST http://localhost:8020/v1/drift \
@@ -60,156 +81,97 @@ curl -X POST http://localhost:8020/v1/drift \
   -d '{"value":0.41,"baseline_mean":0.22,"baseline_std":0.08}'
 ```
 
-## Vision
-
-Build a clinically informed, non-diagnostic system that tracks subtle behavioral rhythm changes over time. The MVP objective is **risk trend detection**, not diagnosis.
-
-## Core Principles
-
-- Privacy by design: collect timing and acoustic features, not typed text content.
-- Longitudinal first: detect persistent trend shifts, not isolated bad days.
-- Modular architecture: each modality can evolve independently.
-- Explainability: show users interpretable trend lines and confidence bands.
-
-## MVP Phases
+## Product Direction
 
 ### Phase 1: Keystroke Cadence Engine
 
-Goal: establish per-user baseline rhythm and detect statistically significant deviations.
+Goal: learn personal cadence baselines and flag meaningful deviation.
 
 Capture:
-- Key down timestamp
-- Key up timestamp
-- Derived dwell time
-- Inter-key flight time
+- key down and key up timestamps
+- derived dwell and flight values
 
-Do not capture:
-- Actual key values
-- Clipboard data
-- App content
-
-Model candidates:
-- Baseline: robust statistical anomaly score (rolling z-score + EWMA)
-- ML: 1D CNN or sequence model over timing windows
+Never capture:
+- actual key values
+- clipboard data
+- app content
 
 Output:
-- Daily cadence stability index
-- Weekly drift score
+- daily cadence stability index
+- weekly drift score
 
-### Phase 2: Micro-Tremor Voice Analysis
+### Phase 2: Voice Stability Analysis
 
-Goal: detect subtle vocal instability trends over repeated, standardized prompts.
+Goal: track repeated prompt-based voice stability patterns.
 
-Capture protocol:
-- Prompted sentence read
-- Sustained vowel (e.g., "Ah") for 5 seconds
-- Weekly cadence (same microphone if possible)
-
-Features:
-- MFCC and deltas
-- Jitter (F0 instability)
-- Shimmer (amplitude instability)
-- Harmonics-to-noise ratio proxies
-- Spectral/energy contour statistics
-
-Model candidates:
-- Baseline: feature-level drift and control-chart monitoring
-- ML: classifier/regressor over extracted feature vectors
+Features include:
+- MFCC + deltas
+- jitter and shimmer statistics
+- spectral and contour statistics
 
 Output:
-- Voice stability index
-- Biomarker-specific trend indicators
+- voice stability index
+- per-feature trend markers
 
-### Phase 3: Longitudinal Dashboard
+### Phase 3: Longitudinal Fusion Dashboard
 
-Goal: separate normal variance from persistent decline.
+Goal: separate temporary variance from persistent trend shift.
 
-Dashboard should include:
-- Per-modality trend lines over weeks/months
-- Confidence intervals and variance envelopes
-- Change-point markers
-- Combined risk trajectory score
-- Explainable factor breakdown (which biomarker changed most)
+Dashboard targets:
+- per-modality trend lines
+- confidence envelopes
+- change-point markers
+- combined risk trajectory with attribution
 
-## Suggested System Architecture
+## Architecture Snapshot
 
-- Clients:
-  - Desktop collector (keystroke timing only)
-  - Mobile recorder (prompted voice tasks)
-  - Web dashboard (longitudinal visualization)
-- API layer:
-  - Ingestion API
-  - Feature extraction jobs
-  - Scoring service
-- Data layer:
-  - Time-series feature store
-  - Aggregation tables for dashboard
-- ML layer:
-  - Personal baseline service
-  - Drift detection service
-  - Ensemble trend scoring
+- Clients: desktop collector, mobile recorder, dashboard
+- Services: ingestion API, feature pipeline, scoring service
+- ML: baseline, drift, and fusion models
+- Data: schema-driven event storage + aggregate views
 
-## Privacy, Ethics, and Safety
+See:
+- `docs/architecture.md`
+- `docs/privacy-and-consent.md`
 
-- Explicit informed consent before collection.
-- End-to-end encryption in transit and at rest.
-- Local pre-processing where possible.
-- Data minimization and retention controls.
-- No medical diagnosis claims in-app.
-- Clear recommendation language: "consider clinical follow-up" instead of "you have X".
+## Principles
 
-## MVP Success Criteria
+- Privacy by design
+- Longitudinal-first analytics
+- Modular modality-specific components
+- Explainable scoring outputs
 
-- Reliable daily feature ingestion from both modalities.
-- Stable personalized baseline established within first 2-4 weeks.
-- Drift detector sensitivity tuned to minimize false positives.
-- Dashboard clearly communicates trend vs day-to-day noise.
+## Success Criteria (MVP)
 
-## Near-Term Build Plan (8-10 Weeks)
+- reliable ingestion for cadence and voice events
+- baseline stabilization in first 2-4 weeks
+- practical sensitivity without alert fatigue
+- trend communication that is understandable and actionable
 
-1. Foundation (Week 1-2)
-- Define schemas and event contracts.
-- Implement keystroke timing collector prototype.
-- Set up ingestion API and storage.
-
-2. Keystroke MVP (Week 3-4)
-- Add cadence feature engineering pipeline.
-- Implement baseline anomaly scoring.
-- Build first trend chart.
-
-3. Voice MVP (Week 5-7)
-- Implement recording workflow and QA checks.
-- Build audio feature extraction pipeline.
-- Add voice stability scoring.
-
-4. Unified Longitudinal Layer (Week 8-10)
-- Add multimodal fusion score.
-- Build dashboard with confidence bands and change-point events.
-- Validate on retrospective test cohorts.
-
-## Repository Starter Structure
+## Repository Layout
 
 ```text
-/apps
-  /collector-desktop
-  /recorder-mobile
-  /dashboard-web
-/services
-  /ingestion-api
-  /feature-pipeline
-  /scoring-service
-/ml
-  /keystroke
-  /voice
-  /fusion
-/data
-  /schemas
-  /sample
-/docs
+apps/
+  collector-desktop/
+  dashboard-web/
+  recorder-mobile/
+data/
+  schemas/
+docs/
   architecture.md
   privacy-and-consent.md
+ml/
+  fusion/
+  keystroke/
+  voice/
+scripts/
+  start_local.ps1
+services/
+  feature-pipeline/
+  ingestion-api/
+  scoring-service/
 ```
 
 ## Disclaimer
 
-Trace is an assistive trend-monitoring tool and is not a medical diagnostic device. Any concerning trend should be reviewed with a qualified clinician.
+Trace is a non-diagnostic trend-monitoring system. Concerning trends should be reviewed with a qualified clinician.
