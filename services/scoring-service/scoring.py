@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from statistics import mean, pstdev
 
 
 def z_score(value: float, baseline_mean: float, baseline_std: float) -> float:
@@ -25,4 +26,41 @@ def fuse_modalities(keystroke_risk: float, voice_risk: float, voice_quality: flo
         "composite_risk": clamp01(composite),
         "keystroke_weight": keystroke_weight,
         "voice_weight": voice_weight,
+    }
+
+
+def trend_risk_series(series: list[float], baseline_window: int = 7) -> dict:
+    if len(series) < 3:
+        return {
+            "points": [],
+            "latest_risk": 0.0,
+            "latest_z_score": 0.0,
+        }
+
+    points: list[dict] = []
+    for idx, value in enumerate(series):
+        if idx < baseline_window:
+            window = series[: idx + 1]
+        else:
+            window = series[idx - baseline_window : idx]
+
+        baseline_mean = mean(window)
+        baseline_std = pstdev(window) if len(window) > 1 else 1e-6
+        z = z_score(value, baseline_mean, baseline_std)
+        points.append(
+            {
+                "index": idx,
+                "value": value,
+                "baseline_mean": baseline_mean,
+                "baseline_std": max(baseline_std, 1e-6),
+                "z_score": z,
+                "risk": drift_probability(z),
+            }
+        )
+
+    latest = points[-1]
+    return {
+        "points": points,
+        "latest_risk": latest["risk"],
+        "latest_z_score": latest["z_score"],
     }

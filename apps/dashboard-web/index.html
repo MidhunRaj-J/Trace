@@ -3,29 +3,79 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trace Dashboard MVP</title>
+  <title>Trace Longitudinal Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <main class="shell">
-    <header>
-      <h1>Trace Longitudinal Dashboard</h1>
-      <p>Trend-aware biomarkers across keystroke cadence and voice micro-tremor.</p>
+  <main class="shell stage-in">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Trace Studio</p>
+        <h1>Longitudinal Drift Explorer</h1>
+        <p>Generate realistic sessions, score personalized drift, and inspect modality-level trend movement in real time.</p>
+      </div>
+      <div class="hero-metrics">
+        <div class="mini-card">
+          <span>Composite Risk</span>
+          <strong id="compositeRisk">--</strong>
+        </div>
+        <div class="mini-card">
+          <span>Trend Direction</span>
+          <strong id="trendDirection">--</strong>
+        </div>
+      </div>
     </header>
 
-    <section class="panel">
-      <h2>User Snapshot</h2>
-      <div id="summary">Loading...</div>
+    <section class="panel controls">
+      <h2>Run Configuration</h2>
+      <div class="control-grid">
+        <label>
+          User ID Hash
+          <input id="userId" value="demo_user_001" minlength="8" />
+        </label>
+        <label>
+          Ingestion API URL
+          <input id="ingestionUrl" value="http://localhost:8010" />
+        </label>
+        <label>
+          Scoring API URL
+          <input id="scoringUrl" value="http://localhost:8020" />
+        </label>
+        <label>
+          Baseline Window (days)
+          <input id="baselineWindow" type="number" min="3" max="30" value="7" />
+        </label>
+      </div>
+      <div class="button-row">
+        <button id="seedBtn" class="btn btn-primary">Generate Demo Month</button>
+        <button id="refreshBtn" class="btn">Refresh Analytics</button>
+        <button id="resetBtn" class="btn btn-danger">Reset User Data</button>
+      </div>
+      <p id="status" class="status">Waiting for action.</p>
     </section>
 
     <section class="panel charts">
-      <h2>Mock Trend Curves</h2>
+      <h2>Risk Trajectories</h2>
       <canvas id="trendCanvas" width="760" height="260"></canvas>
+      <div class="legend">
+        <span><i class="dot key"></i>Keystroke Risk</span>
+        <span><i class="dot voice"></i>Voice Risk</span>
+        <span><i class="dot combo"></i>Composite</span>
+      </div>
     </section>
 
-    <section class="panel">
-      <h2>Current Composite Risk</h2>
-      <div id="riskCard" class="risk-card">--</div>
+    <section class="panel two-up">
+      <div>
+        <h2>User Snapshot</h2>
+        <pre id="summary">Loading...</pre>
+      </div>
+      <div>
+        <h2>Latest Signals</h2>
+        <div id="latestSignals" class="signal-list">--</div>
+      </div>
     </section>
   </main>
 

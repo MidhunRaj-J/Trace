@@ -19,8 +19,9 @@ Most digital health prototypes overfit to single snapshots. Trace is built aroun
 
 - Ingestion API for events and sessions
 - Scoring service for drift computations
+- Rolling trend risk endpoint for longitudinal scoring
 - Feature pipeline stubs and model training stubs
-- Dashboard web app scaffold
+- Dashboard web app with live API-driven trajectories
 - Data schemas and architecture/privacy docs
 
 ## Quickstart (Local MVP)
@@ -53,9 +54,21 @@ Optional helper:
 ./scripts/start_local.ps1
 ```
 
+Optional seed script (adds 30 demo days for `demo_user_001`):
+
+```powershell
+python scripts/seed_demo_data.py
+```
+
 ### 3) Open Dashboard
 
 Open `apps/dashboard-web/index.html` directly in your browser.
+
+From the dashboard you can:
+- generate a realistic demo month of events
+- compute live keystroke and voice trend trajectories
+- inspect composite risk and trend direction
+- reset and replay the demo scenario quickly
 
 ## First API Calls
 
