@@ -48,11 +48,29 @@
           Baseline Window (days)
           <input id="baselineWindow" type="number" min="3" max="30" value="7" />
         </label>
+        <label>
+          Realtime Duration (minutes)
+          <input id="realtimeMinutes" type="number" min="1" max="30" value="5" />
+        </label>
+        <label>
+          Longitudinal Simulation (days)
+          <input id="longitudinalDays" type="number" min="30" max="365" value="180" />
+        </label>
       </div>
       <div class="button-row">
         <button id="seedBtn" class="btn btn-primary">Generate Demo Month</button>
+        <button id="seedLongBtn" class="btn">Generate Longitudinal Scenario</button>
+        <button id="startRealtimeBtn" class="btn btn-primary">Start Realtime Test</button>
+        <button id="stopRealtimeBtn" class="btn" disabled>Stop Realtime Test</button>
         <button id="refreshBtn" class="btn">Refresh Analytics</button>
         <button id="resetBtn" class="btn btn-danger">Reset User Data</button>
+      </div>
+      <div class="realtime-wrap">
+        <label>
+          Typing Pad (events captured while test is running)
+          <textarea id="typingPad" rows="4" placeholder="Click Start Realtime Test, then type here for 5 minutes..." disabled></textarea>
+        </label>
+        <div id="realtimeStats" class="realtime-stats">Realtime inactive.</div>
       </div>
       <p id="status" class="status">Waiting for action.</p>
     </section>

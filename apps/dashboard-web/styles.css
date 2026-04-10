@@ -121,6 +121,21 @@ input {
   background: #fffcf7;
 }
 
+textarea {
+  border: 1px solid #cec9bc;
+  border-radius: 10px;
+  padding: 10px;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: #fffcf7;
+  resize: vertical;
+}
+
+textarea:disabled {
+  background: #f5f1e8;
+  color: #7b7e89;
+}
+
 .button-row {
   margin-top: 14px;
   display: flex;
@@ -158,6 +173,21 @@ input {
   margin: 12px 0 0;
   color: var(--ink-soft);
   font-size: 0.9rem;
+}
+
+.realtime-wrap {
+  margin-top: 14px;
+  display: grid;
+  gap: 8px;
+}
+
+.realtime-stats {
+  border: 1px solid #d7cfbf;
+  border-radius: 10px;
+  background: #f9f3e6;
+  padding: 9px 10px;
+  color: #564b3a;
+  font-size: 0.88rem;
 }
 
 canvas {

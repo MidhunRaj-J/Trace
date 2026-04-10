@@ -3,15 +3,34 @@ const dom = {
   ingestionUrl: document.getElementById("ingestionUrl"),
   scoringUrl: document.getElementById("scoringUrl"),
   baselineWindow: document.getElementById("baselineWindow"),
+  realtimeMinutes: document.getElementById("realtimeMinutes"),
+  longitudinalDays: document.getElementById("longitudinalDays"),
   seedBtn: document.getElementById("seedBtn"),
+  seedLongBtn: document.getElementById("seedLongBtn"),
+  startRealtimeBtn: document.getElementById("startRealtimeBtn"),
+  stopRealtimeBtn: document.getElementById("stopRealtimeBtn"),
   refreshBtn: document.getElementById("refreshBtn"),
   resetBtn: document.getElementById("resetBtn"),
+  typingPad: document.getElementById("typingPad"),
+  realtimeStats: document.getElementById("realtimeStats"),
   summary: document.getElementById("summary"),
   status: document.getElementById("status"),
   latestSignals: document.getElementById("latestSignals"),
   compositeRisk: document.getElementById("compositeRisk"),
   trendDirection: document.getElementById("trendDirection"),
   canvas: document.getElementById("trendCanvas"),
+};
+
+const realtimeState = {
+  active: false,
+  startedAtMs: 0,
+  endsAtMs: 0,
+  sentEvents: 0,
+  sendErrors: 0,
+  keyDownMap: new Map(),
+  lastKeyUpMs: null,
+  tickTimer: null,
+  voiceTimer: null,
 };
 
 function setStatus(text) {
@@ -32,6 +51,8 @@ function getConfig() {
     ingestionUrl: dom.ingestionUrl.value.trim().replace(/\/$/, ""),
     scoringUrl: dom.scoringUrl.value.trim().replace(/\/$/, ""),
     baselineWindow: Number(dom.baselineWindow.value || 7),
+    realtimeMinutes: Number(dom.realtimeMinutes.value || 5),
+    longitudinalDays: Number(dom.longitudinalDays.value || 180),
   };
 }
 
@@ -68,18 +89,45 @@ function buildDemoMonth(dayCount = 30) {
   return rows;
 }
 
-async function seedDemoData() {
+function buildLongitudinalScenario(dayCount = 180) {
+  const random = rng(2404);
+  const startTs = Date.now() - dayCount * 24 * 60 * 60 * 1000;
+  const rows = [];
+
+  for (let i = 0; i < dayCount; i += 1) {
+    let driftStep = 0;
+    if (i > Math.floor(dayCount * 0.35) && i <= Math.floor(dayCount * 0.7)) {
+      driftStep = (i - Math.floor(dayCount * 0.35)) * 0.45;
+    } else if (i > Math.floor(dayCount * 0.7)) {
+      const firstSlope = (Math.floor(dayCount * 0.7) - Math.floor(dayCount * 0.35)) * 0.45;
+      driftStep = firstSlope + (i - Math.floor(dayCount * 0.7)) * 0.2;
+    }
+
+    const dwellMs = 98 + driftStep + (random() * 7 - 3.5);
+    const flightMs = 72 + driftStep * 0.6 + (random() * 6 - 3);
+    rows.push({
+      dayIndex: i,
+      timestampMs: startTs + i * 24 * 60 * 60 * 1000,
+      dwellMs: Number(dwellMs.toFixed(3)),
+      flightMsPrev: Number(flightMs.toFixed(3)),
+      voiceQuality: Number((0.95 - driftStep * 0.006 + (random() * 0.04 - 0.02)).toFixed(3)),
+    });
+  }
+
+  return rows;
+}
+
+async function uploadScenario(points, label) {
   const cfg = getConfig();
   if (cfg.userId.length < 8) {
     setStatus("User ID hash must be at least 8 characters.");
     return;
   }
 
-  setStatus("Generating and uploading demo month...");
-  const points = buildDemoMonth(30);
-
+  setStatus(`${label}: resetting existing user data...`);
   await apiJson(`${cfg.ingestionUrl}/v1/users/${cfg.userId}`, { method: "DELETE" });
 
+  setStatus(`${label}: uploading ${points.length} days...`);
   for (const row of points) {
     await apiJson(`${cfg.ingestionUrl}/v1/keystroke/events`, {
       method: "POST",
@@ -109,8 +157,20 @@ async function seedDemoData() {
     });
   }
 
-  setStatus(`Uploaded ${points.length} keystroke events and ${points.length} voice sessions.`);
+  setStatus(`${label}: upload complete.`);
   await refreshAnalytics();
+}
+
+async function seedDemoData() {
+  const points = buildDemoMonth(30);
+  await uploadScenario(points, "Demo month");
+}
+
+async function seedLongitudinalData() {
+  const cfg = getConfig();
+  const dayCount = Math.max(30, Math.min(365, cfg.longitudinalDays));
+  const points = buildLongitudinalScenario(dayCount);
+  await uploadScenario(points, `Longitudinal scenario (${dayCount} days)`);
 }
 
 async function fetchUserData() {
@@ -135,13 +195,25 @@ async function scoreSeries(series) {
   });
 }
 
-function compositeSeries(keyRisks, voiceRisks, voiceQualitySeries) {
-  const len = Math.min(keyRisks.length, voiceRisks.length);
+function compositeSeries(keyRisks, voiceRisks, voiceQualitySeries, hasKey, hasVoice) {
+  const len = Math.max(keyRisks.length, voiceRisks.length);
   const out = [];
   for (let i = 0; i < len; i += 1) {
+    const keyRisk = keyRisks[i] ?? 0;
+    const voiceRisk = voiceRisks[i] ?? 0;
+
+    if (hasKey && !hasVoice) {
+      out.push(keyRisk);
+      continue;
+    }
+    if (!hasKey && hasVoice) {
+      out.push(voiceRisk);
+      continue;
+    }
+
     const voiceWeight = 0.5 * Math.max(0, Math.min(1, voiceQualitySeries[i] ?? 1));
     const keyWeight = 1 - voiceWeight;
-    out.push((keyRisks[i] * keyWeight) + (voiceRisks[i] * voiceWeight));
+    out.push((keyRisk * keyWeight) + (voiceRisk * voiceWeight));
   }
   return out;
 }
@@ -225,9 +297,11 @@ async function refreshAnalytics() {
     const keySeries = keystrokeData.events.map((e) => Number(e.dwell_ms));
     const voiceSeries = voiceData.sessions.map((s) => Number(s.environment_quality_score || 0));
     const voiceQualitySeries = voiceData.sessions.map((s) => Number(s.environment_quality_score || 1));
+    const hasKey = keySeries.length >= 3;
+    const hasVoice = voiceSeries.length >= 3;
 
-    if (!keySeries.length || !voiceSeries.length) {
-      dom.latestSignals.innerHTML = "No events yet. Click Generate Demo Month.";
+    if (!keySeries.length && !voiceSeries.length) {
+      dom.latestSignals.innerHTML = "No events yet. Start realtime test, generate demo month, or run longitudinal scenario.";
       dom.compositeRisk.textContent = "--";
       dom.trendDirection.textContent = "--";
       drawTrendChart([], [], []);
@@ -236,13 +310,13 @@ async function refreshAnalytics() {
     }
 
     const [keyTrend, voiceTrend] = await Promise.all([
-      scoreSeries(keySeries),
-      scoreSeries(voiceSeries),
+      hasKey ? scoreSeries(keySeries) : Promise.resolve({ points: [] }),
+      hasVoice ? scoreSeries(voiceSeries) : Promise.resolve({ points: [] }),
     ]);
 
     const keyRisk = keyTrend.points.map((p) => p.risk);
     const voiceRisk = voiceTrend.points.map((p) => p.risk);
-    const composite = compositeSeries(keyRisk, voiceRisk, voiceQualitySeries);
+    const composite = compositeSeries(keyRisk, voiceRisk, voiceQualitySeries, hasKey, hasVoice);
 
     drawTrendChart(keyRisk, voiceRisk, composite);
 
@@ -252,12 +326,16 @@ async function refreshAnalytics() {
 
     dom.compositeRisk.textContent = toFixedSafe(latestComposite, 3);
     dom.trendDirection.textContent = trendLabel(composite);
-    dom.latestSignals.innerHTML = [
+    const signalRows = [
       `<div class="signal-item"><span>Keystroke z-score</span><strong>${toFixedSafe(latestKey.z_score, 2)}</strong></div>`,
       `<div class="signal-item"><span>Keystroke risk</span><strong>${toFixedSafe(latestKey.risk, 3)}</strong></div>`,
       `<div class="signal-item"><span>Voice z-score</span><strong>${toFixedSafe(latestVoice.z_score, 2)}</strong></div>`,
       `<div class="signal-item"><span>Voice risk</span><strong>${toFixedSafe(latestVoice.risk, 3)}</strong></div>`,
-    ].join("");
+    ];
+    if (realtimeState.active) {
+      signalRows.push(`<div class="signal-item"><span>Realtime events sent</span><strong>${realtimeState.sentEvents}</strong></div>`);
+    }
+    dom.latestSignals.innerHTML = signalRows.join("");
 
     setStatus("Analytics refreshed.");
   } catch (error) {
@@ -275,8 +353,164 @@ async function resetUserData() {
   await refreshAnalytics();
 }
 
+function setRealtimeUi() {
+  dom.startRealtimeBtn.disabled = realtimeState.active;
+  dom.stopRealtimeBtn.disabled = !realtimeState.active;
+  dom.typingPad.disabled = !realtimeState.active;
+  if (realtimeState.active) {
+    dom.typingPad.focus();
+  }
+}
+
+function updateRealtimeStats() {
+  if (!realtimeState.active) {
+    dom.realtimeStats.textContent = "Realtime inactive.";
+    return;
+  }
+
+  const remainingMs = Math.max(0, realtimeState.endsAtMs - Date.now());
+  const seconds = Math.floor((remainingMs / 1000) % 60);
+  const minutes = Math.floor(remainingMs / 60000);
+  dom.realtimeStats.textContent = `Running: ${minutes}:${seconds.toString().padStart(2, "0")} remaining | events sent: ${realtimeState.sentEvents} | send errors: ${realtimeState.sendErrors}`;
+}
+
+async function sendRealtimeVoiceSession() {
+  if (!realtimeState.active) {
+    return;
+  }
+
+  const cfg = getConfig();
+  try {
+    await apiJson(`${cfg.ingestionUrl}/v1/voice/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id_hash: cfg.userId,
+        prompt_id: "realtime_checkpoint",
+        recorded_at_ms: Date.now(),
+        sample_rate_hz: 16000,
+        duration_s: 5.0,
+        f0_series_hz: [128.0, 129.2, 130.1],
+        rms_series: [0.28, 0.31, 0.29],
+        environment_quality_score: 0.9,
+      }),
+    });
+  } catch {
+    realtimeState.sendErrors += 1;
+  }
+}
+
+async function postRealtimeKeystroke(dwellMs, flightMsPrev) {
+  const cfg = getConfig();
+  try {
+    await apiJson(`${cfg.ingestionUrl}/v1/keystroke/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_id_hash: cfg.userId,
+        session_id: `rt_${Math.floor(realtimeState.startedAtMs / 1000)}`,
+        timestamp_ms: Date.now(),
+        dwell_ms: Number(dwellMs.toFixed(3)),
+        flight_ms_prev: Number(flightMsPrev.toFixed(3)),
+      }),
+    });
+    realtimeState.sentEvents += 1;
+  } catch {
+    realtimeState.sendErrors += 1;
+  }
+}
+
+function onRealtimeKeyDown(event) {
+  if (!realtimeState.active || event.repeat) {
+    return;
+  }
+  realtimeState.keyDownMap.set(event.code, performance.now());
+}
+
+function onRealtimeKeyUp(event) {
+  if (!realtimeState.active) {
+    return;
+  }
+
+  const downTs = realtimeState.keyDownMap.get(event.code);
+  realtimeState.keyDownMap.delete(event.code);
+  if (typeof downTs !== "number") {
+    return;
+  }
+
+  const upTs = performance.now();
+  const dwellMs = Math.max(0, upTs - downTs);
+  const flightMsPrev = realtimeState.lastKeyUpMs === null ? 0 : Math.max(0, downTs - realtimeState.lastKeyUpMs);
+  realtimeState.lastKeyUpMs = upTs;
+  postRealtimeKeystroke(dwellMs, flightMsPrev);
+}
+
+async function stopRealtimeTest(autoStopped = false) {
+  if (!realtimeState.active) {
+    return;
+  }
+
+  realtimeState.active = false;
+  if (realtimeState.tickTimer) {
+    clearInterval(realtimeState.tickTimer);
+    realtimeState.tickTimer = null;
+  }
+  if (realtimeState.voiceTimer) {
+    clearInterval(realtimeState.voiceTimer);
+    realtimeState.voiceTimer = null;
+  }
+
+  dom.typingPad.removeEventListener("keydown", onRealtimeKeyDown);
+  dom.typingPad.removeEventListener("keyup", onRealtimeKeyUp);
+  setRealtimeUi();
+  updateRealtimeStats();
+  setStatus(autoStopped ? "Realtime test completed." : "Realtime test stopped.");
+  await refreshAnalytics();
+}
+
+async function startRealtimeTest() {
+  const cfg = getConfig();
+  if (cfg.userId.length < 8) {
+    setStatus("User ID hash must be at least 8 characters.");
+    return;
+  }
+
+  const minutes = Math.max(1, Math.min(30, cfg.realtimeMinutes));
+  realtimeState.active = true;
+  realtimeState.startedAtMs = Date.now();
+  realtimeState.endsAtMs = realtimeState.startedAtMs + minutes * 60 * 1000;
+  realtimeState.sentEvents = 0;
+  realtimeState.sendErrors = 0;
+  realtimeState.keyDownMap.clear();
+  realtimeState.lastKeyUpMs = null;
+
+  dom.typingPad.value = "";
+  dom.typingPad.addEventListener("keydown", onRealtimeKeyDown);
+  dom.typingPad.addEventListener("keyup", onRealtimeKeyUp);
+  setRealtimeUi();
+
+  setStatus(`Realtime test started for ${minutes} minute(s). Type in the typing pad.`);
+  updateRealtimeStats();
+
+  realtimeState.tickTimer = setInterval(async () => {
+    updateRealtimeStats();
+    if (Date.now() >= realtimeState.endsAtMs) {
+      await stopRealtimeTest(true);
+    }
+  }, 1000);
+
+  realtimeState.voiceTimer = setInterval(() => {
+    sendRealtimeVoiceSession();
+  }, 60000);
+}
+
 dom.seedBtn.addEventListener("click", () => seedDemoData());
+dom.seedLongBtn.addEventListener("click", () => seedLongitudinalData());
+dom.startRealtimeBtn.addEventListener("click", () => startRealtimeTest());
+dom.stopRealtimeBtn.addEventListener("click", () => stopRealtimeTest(false));
 dom.refreshBtn.addEventListener("click", () => refreshAnalytics());
 dom.resetBtn.addEventListener("click", () => resetUserData());
 
+setRealtimeUi();
+updateRealtimeStats();
 refreshAnalytics();

@@ -65,7 +65,9 @@ python scripts/seed_demo_data.py
 Open `apps/dashboard-web/index.html` directly in your browser.
 
 From the dashboard you can:
+- run a realtime keystroke capture test (default 5 minutes)
 - generate a realistic demo month of events
+- generate a long-horizon scenario (30-365 days) for longitudinal analysis
 - compute live keystroke and voice trend trajectories
 - inspect composite risk and trend direction
 - reset and replay the demo scenario quickly
