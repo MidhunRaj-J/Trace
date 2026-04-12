@@ -18,6 +18,13 @@ const dom = {
   latestSignals: document.getElementById("latestSignals"),
   compositeRisk: document.getElementById("compositeRisk"),
   trendDirection: document.getElementById("trendDirection"),
+  totalPoints: document.getElementById("totalPoints"),
+  keyLatestRisk: document.getElementById("keyLatestRisk"),
+  voiceLatestRisk: document.getElementById("voiceLatestRisk"),
+  comboLatestRisk: document.getElementById("comboLatestRisk"),
+  presetFast: document.getElementById("presetFast"),
+  presetDefault: document.getElementById("presetDefault"),
+  presetStudy: document.getElementById("presetStudy"),
   canvas: document.getElementById("trendCanvas"),
 };
 
@@ -33,8 +40,16 @@ const realtimeState = {
   voiceTimer: null,
 };
 
-function setStatus(text) {
+function setStatus(text, tone = "neutral") {
   dom.status.textContent = text;
+  dom.status.className = `status ${tone === "neutral" ? "" : `status-${tone}`}`.trim();
+}
+
+function setBusy(disabled) {
+  dom.seedBtn.disabled = disabled;
+  dom.seedLongBtn.disabled = disabled;
+  dom.refreshBtn.disabled = disabled;
+  dom.resetBtn.disabled = disabled;
 }
 
 function rng(seed) {
@@ -120,45 +135,57 @@ function buildLongitudinalScenario(dayCount = 180) {
 async function uploadScenario(points, label) {
   const cfg = getConfig();
   if (cfg.userId.length < 8) {
-    setStatus("User ID hash must be at least 8 characters.");
+    setStatus("User ID hash must be at least 8 characters.", "error");
     return;
   }
 
-  setStatus(`${label}: resetting existing user data...`);
-  await apiJson(`${cfg.ingestionUrl}/v1/users/${cfg.userId}`, { method: "DELETE" });
+  try {
+    setBusy(true);
+    setStatus(`${label}: resetting existing user data...`, "working");
+    await apiJson(`${cfg.ingestionUrl}/v1/users/${cfg.userId}`, { method: "DELETE" });
 
-  setStatus(`${label}: uploading ${points.length} days...`);
-  for (const row of points) {
-    await apiJson(`${cfg.ingestionUrl}/v1/keystroke/events`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id_hash: cfg.userId,
-        session_id: `session_${row.dayIndex.toString().padStart(3, "0")}`,
-        timestamp_ms: row.timestampMs,
-        dwell_ms: row.dwellMs,
-        flight_ms_prev: row.flightMsPrev,
-      }),
-    });
+    setStatus(`${label}: uploading ${points.length} days...`, "working");
+    for (const row of points) {
+      await apiJson(`${cfg.ingestionUrl}/v1/keystroke/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id_hash: cfg.userId,
+          session_id: `session_${row.dayIndex.toString().padStart(3, "0")}`,
+          timestamp_ms: row.timestampMs,
+          dwell_ms: row.dwellMs,
+          flight_ms_prev: row.flightMsPrev,
+        }),
+      });
 
-    await apiJson(`${cfg.ingestionUrl}/v1/voice/sessions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_id_hash: cfg.userId,
-        prompt_id: "weekly_ah",
-        recorded_at_ms: row.timestampMs,
-        sample_rate_hz: 16000,
-        duration_s: 5.0,
-        f0_series_hz: [128.2, 130.3, 129.8],
-        rms_series: [0.29, 0.31, 0.28],
-        environment_quality_score: Math.max(0, Math.min(1, row.voiceQuality)),
-      }),
-    });
+      await apiJson(`${cfg.ingestionUrl}/v1/voice/sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id_hash: cfg.userId,
+          prompt_id: "weekly_ah",
+          recorded_at_ms: row.timestampMs,
+          sample_rate_hz: 16000,
+          duration_s: 5.0,
+          f0_series_hz: [128.2, 130.3, 129.8],
+          rms_series: [0.29, 0.31, 0.28],
+          environment_quality_score: Math.max(0, Math.min(1, row.voiceQuality)),
+        }),
+      });
+
+      if (row.dayIndex > 0 && row.dayIndex % 20 === 0) {
+        setStatus(`${label}: uploaded ${row.dayIndex + 1}/${points.length} days...`, "working");
+      }
+    }
+
+    setStatus(`${label}: upload complete.`, "success");
+    await refreshAnalytics();
+  } catch (error) {
+    console.error(error);
+    setStatus(`Upload failed: ${error.message}`, "error");
+  } finally {
+    setBusy(false);
   }
-
-  setStatus(`${label}: upload complete.`);
-  await refreshAnalytics();
 }
 
 async function seedDemoData() {
@@ -242,19 +269,11 @@ function plotSeries(ctx, values, color, width, height) {
   const xStep = values.length > 1 ? (right - left) / (values.length - 1) : right - left;
 
   ctx.strokeStyle = color;
-  totalPoints: document.getElementById("totalPoints"),
-  keyLatestRisk: document.getElementById("keyLatestRisk"),
-  voiceLatestRisk: document.getElementById("voiceLatestRisk"),
-  comboLatestRisk: document.getElementById("comboLatestRisk"),
-  presetFast: document.getElementById("presetFast"),
-  presetDefault: document.getElementById("presetDefault"),
-  presetStudy: document.getElementById("presetStudy"),
   ctx.lineWidth = 3;
   ctx.beginPath();
   values.forEach((v, i) => {
     const x = left + i * xStep;
     const y = bottom - Math.max(0, Math.min(1, v)) * (bottom - top);
-  dom.status.className = `status ${tone === "neutral" ? "" : `status-${tone}`}`.trim();
     if (i === 0) {
       ctx.moveTo(x, y);
     } else {
@@ -267,7 +286,7 @@ function plotSeries(ctx, values, color, width, height) {
 function drawTrendChart(keystrokeRisk, voiceRisk, compositeRisk) {
   const ctx = dom.canvas.getContext("2d");
   const width = dom.canvas.width;
-    setStatus("User ID hash must be at least 8 characters.", "error");
+  const height = dom.canvas.height;
   ctx.clearRect(0, 0, width, height);
   drawGrid(ctx, width, height);
   plotSeries(ctx, keystrokeRisk, "#155b70", width, height);
@@ -288,68 +307,14 @@ function trendLabel(series) {
   }
   const delta = series[series.length - 1] - series[Math.max(0, series.length - 8)];
   if (delta > 0.08) {
-    return "Rising";
+    return "Rising +";
   }
   if (delta < -0.08) {
-    return "Falling";
+    return "Falling -";
   }
   return "Stable";
 }
 
-async function refreshAnalytics() {
-  try {
-    setStatus("Fetching user events and computing trajectories...");
-    const { summary, keystrokeData, voiceData } = await fetchUserData();
-    dom.summary.textContent = JSON.stringify(summary, null, 2);
-
-    const keySeries = keystrokeData.events.map((e) => Number(e.dwell_ms));
-    const voiceSeries = voiceData.sessions.map((s) => Number(s.environment_quality_score || 0));
-    const voiceQualitySeries = voiceData.sessions.map((s) => Number(s.environment_quality_score || 1));
-    const hasKey = keySeries.length >= 3;
-    const hasVoice = voiceSeries.length >= 3;
-
-    if (!keySeries.length && !voiceSeries.length) {
-      dom.latestSignals.innerHTML = "No events yet. Start realtime test, generate demo month, or run longitudinal scenario.";
-      dom.compositeRisk.textContent = "--";
-      dom.trendDirection.textContent = "--";
-      drawTrendChart([], [], []);
-      setStatus("No data found for this user.");
-      return;
-    }
-
-    const [keyTrend, voiceTrend] = await Promise.all([
-      hasKey ? scoreSeries(keySeries) : Promise.resolve({ points: [] }),
-      hasVoice ? scoreSeries(voiceSeries) : Promise.resolve({ points: [] }),
-    ]);
-
-    const keyRisk = keyTrend.points.map((p) => p.risk);
-    const voiceRisk = voiceTrend.points.map((p) => p.risk);
-    const composite = compositeSeries(keyRisk, voiceRisk, voiceQualitySeries, hasKey, hasVoice);
-
-    drawTrendChart(keyRisk, voiceRisk, composite);
-
-    const latestKey = keyTrend.points[keyTrend.points.length - 1] || {};
-    const latestVoice = voiceTrend.points[voiceTrend.points.length - 1] || {};
-    const latestComposite = composite[composite.length - 1];
-
-    dom.compositeRisk.textContent = toFixedSafe(latestComposite, 3);
-    dom.trendDirection.textContent = trendLabel(composite);
-    const signalRows = [
-      `<div class="signal-item"><span>Keystroke z-score</span><strong>${toFixedSafe(latestKey.z_score, 2)}</strong></div>`,
-      `<div class="signal-item"><span>Keystroke risk</span><strong>${toFixedSafe(latestKey.risk, 3)}</strong></div>`,
-      `<div class="signal-item"><span>Voice z-score</span><strong>${toFixedSafe(latestVoice.z_score, 2)}</strong></div>`,
-      `<div class="signal-item"><span>Voice risk</span><strong>${toFixedSafe(latestVoice.risk, 3)}</strong></div>`,
-    ];
-    if (realtimeState.active) {
-      signalRows.push(`<div class="signal-item"><span>Realtime events sent</span><strong>${realtimeState.sentEvents}</strong></div>`);
-    return "Rising +";
-    dom.latestSignals.innerHTML = signalRows.join("");
-
-    return "Falling -";
-  } catch (error) {
-    console.error(error);
-    setStatus(`Failed: ${error.message}`);
-    dom.summary.textContent = "API connection failed. Start both FastAPI services first.";
 function applyPreset(mode) {
   if (mode === "fast") {
     dom.baselineWindow.value = 5;
@@ -371,15 +336,88 @@ function applyPreset(mode) {
   dom.longitudinalDays.value = 180;
   setStatus("Preset applied: Balanced.", "success");
 }
+
+async function refreshAnalytics() {
+  try {
+    setStatus("Fetching user events and computing trajectories...", "working");
+    const { summary, keystrokeData, voiceData } = await fetchUserData();
+    dom.summary.textContent = JSON.stringify(summary, null, 2);
+
+    const keySeries = keystrokeData.events.map((e) => Number(e.dwell_ms));
+    const voiceSeries = voiceData.sessions.map((s) => Number(s.environment_quality_score || 0));
+    const voiceQualitySeries = voiceData.sessions.map((s) => Number(s.environment_quality_score || 1));
+    const hasKey = keySeries.length >= 3;
+    const hasVoice = voiceSeries.length >= 3;
+
+    if (!keySeries.length && !voiceSeries.length) {
+      dom.latestSignals.innerHTML = "No events yet. Start realtime test, generate demo month, or run longitudinal scenario.";
+      dom.compositeRisk.textContent = "--";
+      dom.trendDirection.textContent = "--";
+      dom.totalPoints.textContent = "0";
+      dom.keyLatestRisk.textContent = "--";
+      dom.voiceLatestRisk.textContent = "--";
+      dom.comboLatestRisk.textContent = "--";
+      drawTrendChart([], [], []);
+      setStatus("No data found for this user.");
+      return;
+    }
+
+    const [keyTrend, voiceTrend] = await Promise.all([
+      hasKey ? scoreSeries(keySeries) : Promise.resolve({ points: [] }),
+      hasVoice ? scoreSeries(voiceSeries) : Promise.resolve({ points: [] }),
+    ]);
+
+    const keyRisk = keyTrend.points.map((p) => p.risk);
+    const voiceRisk = voiceTrend.points.map((p) => p.risk);
+    const composite = compositeSeries(keyRisk, voiceRisk, voiceQualitySeries, hasKey, hasVoice);
+
+    drawTrendChart(keyRisk, voiceRisk, composite);
+
+    const latestKey = keyTrend.points[keyTrend.points.length - 1] || {};
+    const latestVoice = voiceTrend.points[voiceTrend.points.length - 1] || {};
+    const latestComposite = composite[composite.length - 1];
+    const totalPoints = keySeries.length + voiceSeries.length;
+
+    dom.compositeRisk.textContent = toFixedSafe(latestComposite, 3);
+    dom.trendDirection.textContent = trendLabel(composite);
+    dom.totalPoints.textContent = String(totalPoints);
+    dom.keyLatestRisk.textContent = toFixedSafe(latestKey.risk, 3);
+    dom.voiceLatestRisk.textContent = toFixedSafe(latestVoice.risk, 3);
+    dom.comboLatestRisk.textContent = toFixedSafe(latestComposite, 3);
+
+    const signalRows = [
+      `<div class="signal-item"><span>Keystroke z-score</span><strong>${toFixedSafe(latestKey.z_score, 2)}</strong></div>`,
+      `<div class="signal-item"><span>Keystroke risk</span><strong>${toFixedSafe(latestKey.risk, 3)}</strong></div>`,
+      `<div class="signal-item"><span>Voice z-score</span><strong>${toFixedSafe(latestVoice.z_score, 2)}</strong></div>`,
+      `<div class="signal-item"><span>Voice risk</span><strong>${toFixedSafe(latestVoice.risk, 3)}</strong></div>`,
+    ];
+    if (realtimeState.active) {
+      signalRows.push(`<div class="signal-item"><span>Realtime events sent</span><strong>${realtimeState.sentEvents}</strong></div>`);
+    }
+    dom.latestSignals.innerHTML = signalRows.join("");
+
+    setStatus("Analytics refreshed.", "success");
+  } catch (error) {
+    console.error(error);
+    setStatus(`Failed: ${error.message}`, "error");
+    dom.summary.textContent = "API connection failed. Start both FastAPI services first.";
   }
 }
 
-    setStatus("Fetching user events and computing trajectories...", "working");
-  const cfg = getConfig();
-  setStatus("Resetting user data...");
-  await apiJson(`${cfg.ingestionUrl}/v1/users/${cfg.userId}`, { method: "DELETE" });
-  setStatus("User data reset.");
-  await refreshAnalytics();
+async function resetUserData() {
+  try {
+    const cfg = getConfig();
+    setBusy(true);
+    setStatus("Resetting user data...", "working");
+    await apiJson(`${cfg.ingestionUrl}/v1/users/${cfg.userId}`, { method: "DELETE" });
+    setStatus("User data reset.", "success");
+    await refreshAnalytics();
+  } catch (error) {
+    console.error(error);
+    setStatus(`Reset failed: ${error.message}`, "error");
+  } finally {
+    setBusy(false);
+  }
 }
 
 function setRealtimeUi() {
@@ -388,12 +426,8 @@ function setRealtimeUi() {
   dom.typingPad.disabled = !realtimeState.active;
   if (realtimeState.active) {
     dom.typingPad.focus();
-      dom.totalPoints.textContent = "0";
-      dom.keyLatestRisk.textContent = "--";
-      dom.voiceLatestRisk.textContent = "--";
-      dom.comboLatestRisk.textContent = "--";
   }
-      setStatus("No data found for this user.", "neutral");
+}
 
 function updateRealtimeStats() {
   if (!realtimeState.active) {
@@ -414,10 +448,6 @@ async function sendRealtimeVoiceSession() {
 
   const cfg = getConfig();
   try {
-    dom.totalPoints.textContent = String(totalPoints);
-    dom.keyLatestRisk.textContent = toFixedSafe(latestKey.risk, 3);
-    dom.voiceLatestRisk.textContent = toFixedSafe(latestVoice.risk, 3);
-    dom.comboLatestRisk.textContent = toFixedSafe(latestComposite, 3);
     await apiJson(`${cfg.ingestionUrl}/v1/voice/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -429,10 +459,10 @@ async function sendRealtimeVoiceSession() {
         duration_s: 5.0,
         f0_series_hz: [128.0, 129.2, 130.1],
         rms_series: [0.28, 0.31, 0.29],
-    setStatus("Analytics refreshed.", "success");
+        environment_quality_score: 0.9,
       }),
     });
-    setStatus(`Failed: ${error.message}`, "error");
+  } catch {
     realtimeState.sendErrors += 1;
   }
 }
@@ -440,7 +470,7 @@ async function sendRealtimeVoiceSession() {
 async function postRealtimeKeystroke(dwellMs, flightMsPrev) {
   const cfg = getConfig();
   try {
-    setStatus("User ID hash must be at least 8 characters.", "error");
+    await apiJson(`${cfg.ingestionUrl}/v1/keystroke/events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -458,7 +488,7 @@ async function postRealtimeKeystroke(dwellMs, flightMsPrev) {
 }
 
 function onRealtimeKeyDown(event) {
-  setStatus(`Realtime test started for ${minutes} minute(s). Type in the typing pad.`, "working");
+  if (!realtimeState.active || event.repeat) {
     return;
   }
   realtimeState.keyDownMap.set(event.code, performance.now());
@@ -479,9 +509,6 @@ function onRealtimeKeyUp(event) {
   const dwellMs = Math.max(0, upTs - downTs);
   const flightMsPrev = realtimeState.lastKeyUpMs === null ? 0 : Math.max(0, downTs - realtimeState.lastKeyUpMs);
   realtimeState.lastKeyUpMs = upTs;
-dom.presetFast.addEventListener("click", () => applyPreset("fast"));
-dom.presetDefault.addEventListener("click", () => applyPreset("balanced"));
-dom.presetStudy.addEventListener("click", () => applyPreset("study"));
   postRealtimeKeystroke(dwellMs, flightMsPrev);
 }
 
@@ -504,14 +531,14 @@ async function stopRealtimeTest(autoStopped = false) {
   dom.typingPad.removeEventListener("keyup", onRealtimeKeyUp);
   setRealtimeUi();
   updateRealtimeStats();
-  setStatus(autoStopped ? "Realtime test completed." : "Realtime test stopped.");
+  setStatus(autoStopped ? "Realtime test completed." : "Realtime test stopped.", "success");
   await refreshAnalytics();
 }
 
 async function startRealtimeTest() {
   const cfg = getConfig();
   if (cfg.userId.length < 8) {
-    setStatus("User ID hash must be at least 8 characters.");
+    setStatus("User ID hash must be at least 8 characters.", "error");
     return;
   }
 
@@ -529,7 +556,7 @@ async function startRealtimeTest() {
   dom.typingPad.addEventListener("keyup", onRealtimeKeyUp);
   setRealtimeUi();
 
-  setStatus(`Realtime test started for ${minutes} minute(s). Type in the typing pad.`);
+  setStatus(`Realtime test started for ${minutes} minute(s). Type in the typing pad.`, "working");
   updateRealtimeStats();
 
   realtimeState.tickTimer = setInterval(async () => {
@@ -550,6 +577,9 @@ dom.startRealtimeBtn.addEventListener("click", () => startRealtimeTest());
 dom.stopRealtimeBtn.addEventListener("click", () => stopRealtimeTest(false));
 dom.refreshBtn.addEventListener("click", () => refreshAnalytics());
 dom.resetBtn.addEventListener("click", () => resetUserData());
+dom.presetFast.addEventListener("click", () => applyPreset("fast"));
+dom.presetDefault.addEventListener("click", () => applyPreset("balanced"));
+dom.presetStudy.addEventListener("click", () => applyPreset("study"));
 
 setRealtimeUi();
 updateRealtimeStats();
