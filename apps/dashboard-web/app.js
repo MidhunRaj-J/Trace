@@ -242,11 +242,19 @@ function plotSeries(ctx, values, color, width, height) {
   const xStep = values.length > 1 ? (right - left) / (values.length - 1) : right - left;
 
   ctx.strokeStyle = color;
+  totalPoints: document.getElementById("totalPoints"),
+  keyLatestRisk: document.getElementById("keyLatestRisk"),
+  voiceLatestRisk: document.getElementById("voiceLatestRisk"),
+  comboLatestRisk: document.getElementById("comboLatestRisk"),
+  presetFast: document.getElementById("presetFast"),
+  presetDefault: document.getElementById("presetDefault"),
+  presetStudy: document.getElementById("presetStudy"),
   ctx.lineWidth = 3;
   ctx.beginPath();
   values.forEach((v, i) => {
     const x = left + i * xStep;
     const y = bottom - Math.max(0, Math.min(1, v)) * (bottom - top);
+  dom.status.className = `status ${tone === "neutral" ? "" : `status-${tone}`}`.trim();
     if (i === 0) {
       ctx.moveTo(x, y);
     } else {
@@ -259,7 +267,7 @@ function plotSeries(ctx, values, color, width, height) {
 function drawTrendChart(keystrokeRisk, voiceRisk, compositeRisk) {
   const ctx = dom.canvas.getContext("2d");
   const width = dom.canvas.width;
-  const height = dom.canvas.height;
+    setStatus("User ID hash must be at least 8 characters.", "error");
   ctx.clearRect(0, 0, width, height);
   drawGrid(ctx, width, height);
   plotSeries(ctx, keystrokeRisk, "#155b70", width, height);
@@ -334,18 +342,39 @@ async function refreshAnalytics() {
     ];
     if (realtimeState.active) {
       signalRows.push(`<div class="signal-item"><span>Realtime events sent</span><strong>${realtimeState.sentEvents}</strong></div>`);
-    }
+    return "Rising +";
     dom.latestSignals.innerHTML = signalRows.join("");
 
-    setStatus("Analytics refreshed.");
+    return "Falling -";
   } catch (error) {
     console.error(error);
     setStatus(`Failed: ${error.message}`);
     dom.summary.textContent = "API connection failed. Start both FastAPI services first.";
+function applyPreset(mode) {
+  if (mode === "fast") {
+    dom.baselineWindow.value = 5;
+    dom.realtimeMinutes.value = 2;
+    dom.longitudinalDays.value = 45;
+    setStatus("Preset applied: Fast Demo.", "success");
+    return;
+  }
+  if (mode === "study") {
+    dom.baselineWindow.value = 14;
+    dom.realtimeMinutes.value = 10;
+    dom.longitudinalDays.value = 270;
+    setStatus("Preset applied: Study View.", "success");
+    return;
+  }
+
+  dom.baselineWindow.value = 7;
+  dom.realtimeMinutes.value = 5;
+  dom.longitudinalDays.value = 180;
+  setStatus("Preset applied: Balanced.", "success");
+}
   }
 }
 
-async function resetUserData() {
+    setStatus("Fetching user events and computing trajectories...", "working");
   const cfg = getConfig();
   setStatus("Resetting user data...");
   await apiJson(`${cfg.ingestionUrl}/v1/users/${cfg.userId}`, { method: "DELETE" });
@@ -359,8 +388,12 @@ function setRealtimeUi() {
   dom.typingPad.disabled = !realtimeState.active;
   if (realtimeState.active) {
     dom.typingPad.focus();
+      dom.totalPoints.textContent = "0";
+      dom.keyLatestRisk.textContent = "--";
+      dom.voiceLatestRisk.textContent = "--";
+      dom.comboLatestRisk.textContent = "--";
   }
-}
+      setStatus("No data found for this user.", "neutral");
 
 function updateRealtimeStats() {
   if (!realtimeState.active) {
@@ -381,6 +414,10 @@ async function sendRealtimeVoiceSession() {
 
   const cfg = getConfig();
   try {
+    dom.totalPoints.textContent = String(totalPoints);
+    dom.keyLatestRisk.textContent = toFixedSafe(latestKey.risk, 3);
+    dom.voiceLatestRisk.textContent = toFixedSafe(latestVoice.risk, 3);
+    dom.comboLatestRisk.textContent = toFixedSafe(latestComposite, 3);
     await apiJson(`${cfg.ingestionUrl}/v1/voice/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -392,10 +429,10 @@ async function sendRealtimeVoiceSession() {
         duration_s: 5.0,
         f0_series_hz: [128.0, 129.2, 130.1],
         rms_series: [0.28, 0.31, 0.29],
-        environment_quality_score: 0.9,
+    setStatus("Analytics refreshed.", "success");
       }),
     });
-  } catch {
+    setStatus(`Failed: ${error.message}`, "error");
     realtimeState.sendErrors += 1;
   }
 }
@@ -403,7 +440,7 @@ async function sendRealtimeVoiceSession() {
 async function postRealtimeKeystroke(dwellMs, flightMsPrev) {
   const cfg = getConfig();
   try {
-    await apiJson(`${cfg.ingestionUrl}/v1/keystroke/events`, {
+    setStatus("User ID hash must be at least 8 characters.", "error");
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -421,7 +458,7 @@ async function postRealtimeKeystroke(dwellMs, flightMsPrev) {
 }
 
 function onRealtimeKeyDown(event) {
-  if (!realtimeState.active || event.repeat) {
+  setStatus(`Realtime test started for ${minutes} minute(s). Type in the typing pad.`, "working");
     return;
   }
   realtimeState.keyDownMap.set(event.code, performance.now());
@@ -442,6 +479,9 @@ function onRealtimeKeyUp(event) {
   const dwellMs = Math.max(0, upTs - downTs);
   const flightMsPrev = realtimeState.lastKeyUpMs === null ? 0 : Math.max(0, downTs - realtimeState.lastKeyUpMs);
   realtimeState.lastKeyUpMs = upTs;
+dom.presetFast.addEventListener("click", () => applyPreset("fast"));
+dom.presetDefault.addEventListener("click", () => applyPreset("balanced"));
+dom.presetStudy.addEventListener("click", () => applyPreset("study"));
   postRealtimeKeystroke(dwellMs, flightMsPrev);
 }
 

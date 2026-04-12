@@ -69,6 +69,7 @@ h2 {
 
 .hero-metrics {
   display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
   gap: 10px;
 }
 
@@ -97,6 +98,32 @@ h2 {
 .mini-card strong {
   font-size: 1.32rem;
   color: var(--accent);
+}
+
+.preset-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-soft);
+  font-size: 0.86rem;
+}
+
+.chip-btn {
+  border: 1px solid #c9c3b7;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #2f3342;
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-btn:hover {
+  border-color: #2d778e;
+  color: #155b70;
 }
 
 .control-grid {
@@ -157,6 +184,12 @@ textarea:disabled {
   transform: translateY(-1px);
 }
 
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 .btn-primary {
   border-color: #2d778e;
   color: #fff;
@@ -173,6 +206,23 @@ textarea:disabled {
   margin: 12px 0 0;
   color: var(--ink-soft);
   font-size: 0.9rem;
+  border-left: 3px solid #cdc4b1;
+  padding-left: 8px;
+}
+
+.status-working {
+  color: #5b4b20;
+  border-left-color: #be9e4a;
+}
+
+.status-success {
+  color: #1f6b3f;
+  border-left-color: #3f9a64;
+}
+
+.status-error {
+  color: #8d2424;
+  border-left-color: #b04747;
 }
 
 .realtime-wrap {
@@ -227,6 +277,31 @@ canvas {
   background: #2f7a47;
 }
 
+.chart-stats {
+  margin-top: 10px;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
+.stat-chip {
+  border: 1px solid #dbd2c0;
+  background: #faf5ea;
+  border-radius: 10px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.stat-chip span {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+
+.stat-chip strong {
+  font-size: 1.05rem;
+}
+
 .two-up {
   display: grid;
   gap: 12px;
@@ -259,6 +334,10 @@ pre {
   font-size: 0.9rem;
 }
 
+.signal-item strong {
+  color: #243445;
+}
+
 .stage-in {
   animation: reveal 550ms ease;
 }
@@ -280,6 +359,11 @@ pre {
   }
 
   .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-metrics,
+  .chart-stats {
     grid-template-columns: 1fr;
   }
 
